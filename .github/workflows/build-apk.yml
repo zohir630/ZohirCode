@@ -1,0 +1,65 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+    paths: ["*.zip"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip the project
+        run: |
+          shopt -s nullglob
+          zips=(*.zip)
+          [ ${#zips[@]} -gt 0 ] || { echo "No zip in repo root"; exit 1; }
+          rm -rf work && mkdir work
+          unzip -o -q "${zips[0]}" -d work
+          root=$(find work -maxdepth 5 \( -name settings.gradle -o -name settings.gradle.kts \) | head -n 1 | xargs -r dirname)
+          if [ -z "$root" ]; then
+            echo "::error::এই জিপে Gradle প্রজেক্ট নেই। এটা Sketchware ব্যাকআপ। Sketchware Pro থেকে Export source code করে সেই জিপ আপলোড করো।"
+            exit 1
+          fi
+          echo "PROJECT_DIR=$root" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Build debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          if [ -f gradlew ]; then chmod +x gradlew; ./gradlew assembleDebug --no-daemon --stacktrace
+          else gradle assembleDebug --no-daemon --stacktrace; fi
+
+      - name: Collect APK
+        run: |
+          apk=$(find "$PROJECT_DIR" -path "*build/outputs/apk*" -name "*.apk" | head -n 1)
+          [ -n "$apk" ] || { echo "::error::APK পাওয়া যায়নি"; exit 1; }
+          mkdir -p out && cp "$apk" out/Zohirola.apk
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Zohirola-apk
+          path: out/Zohirola.apk
+
+      - name: Publish as release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v1.${{ github.run_number }}"
+          gh release create "$tag" out/Zohirola.apk --title "Zohirola $tag" --notes "Built by GitHub Actions" --latest
