@@ -1,0 +1,9 @@
+{
+  "name": "OpenCode on GitHub Codespaces (phone browser)",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "postCreateCommand": "curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path",
+  "postAttachCommand": "bash .devcontainer/start.sh",
+  "forwardPorts": [4096],
+  "portsAttributes": { "4096": { "label": "OpenCode", "onAutoForward": "openBrowser", "visibility": "private" } },
+  "remoteEnv": { "OPENCODE_PASSWORD": "${localEnv:OPENCODE_PASSWORD}" }
+}
